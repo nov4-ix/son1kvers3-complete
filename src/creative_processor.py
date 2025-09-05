@@ -18,7 +18,7 @@ import soundfile as sf
 import numpy as np
 
 # Local imports
-from src.core.config import get_settings
+from src.config import settings
 from src.services.musicgen import MusicGenService
 from src.services.audio_analysis import AudioAnalyzer
 from src.services.audio_post import AudioPostProcessor
@@ -46,7 +46,7 @@ class MaquetaProcessRequest(BaseModel):
     lufs_target: float = Field(-14.0, description="LUFS target level")
 
 # Global storage
-settings = get_settings()
+# settings ya importado
 _jobs_storage = {}
 _sessions_storage = {}
 

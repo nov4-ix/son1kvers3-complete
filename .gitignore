@@ -34,3 +34,19 @@ node_modules/
 npm-debug.log*
 dist/
 build/
+
+# Archivos grandes - no incluir en Git
+.venv*/
+venv*/
+__pycache__/
+*.pyc
+models/
+*.bin
+*.pth
+*.safetensors
+temp/
+uploads/
+output/
+*.wav
+*.mp3
+*.flac

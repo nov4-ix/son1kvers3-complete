@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 def setup_directories():
     """Create all required directories for Son1k"""
-    from src.core.config import get_settings
-    settings = get_settings()
+    from src.config import settings
+    # settings ya importado
     
     directories = [
         settings.storage_paths["root"],
@@ -314,8 +314,8 @@ def get_directory_size(directory: Path) -> Dict[str, Any]:
 
 def get_storage_stats() -> Dict[str, Any]:
     """Get comprehensive storage statistics"""
-    from src.core.config import get_settings
-    settings = get_settings()
+    from src.config import settings
+    # settings ya importado
     
     stats = {}
     

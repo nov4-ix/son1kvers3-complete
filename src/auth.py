@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 
 # Local imports
-from src.core.config import get_settings
+from src.config import settings
 from src.services.musicgen import MusicGenService, validate_prompt, estimate_generation_time
 from src.services.audio_post import AudioPostProcessor
 
@@ -42,7 +42,7 @@ class GenerateResponse(BaseModel):
     audio_stats: Dict[str, float]
 
 # Global settings
-settings = get_settings()
+# settings ya importado
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_music(

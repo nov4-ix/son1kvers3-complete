@@ -12,9 +12,9 @@ import logging
 from typing import Generator
 from datetime import datetime
 
-from src.core.config import get_settings
+from src.config import settings
 
-settings = get_settings()
+# settings ya importado arriba
 logger = logging.getLogger(__name__)
 
 # Database engine
