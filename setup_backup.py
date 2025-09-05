@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Son1kVers3 Setup Script
-Script de instalación y configuración automática - VERSIÓN CORREGIDA
+Script de instalación y configuración automática
 """
 
 import os
@@ -29,7 +29,6 @@ def check_python_version():
         print(f"   Versión actual: {sys.version}")
         sys.exit(1)
     print(f"✅ Python {sys.version.split()[0]} - OK")
-    return True
 
 def check_system_dependencies():
     """Verificar dependencias del sistema"""
@@ -37,10 +36,7 @@ def check_system_dependencies():
     
     required_packages = {
         'git': 'git --version',
-        'docker': 'docker --version'
-    }
-    
-    optional_packages = {
+        'docker': 'docker --version',
         'redis': 'redis-server --version'
     }
     
@@ -57,34 +53,18 @@ def check_system_dependencies():
             missing.append(package)
             print(f"❌ {package} - No encontrado")
     
-    # Verificar opcionales
-    for package, command in optional_packages.items():
-        try:
-            result = subprocess.run(command.split(), capture_output=True, text=True)
-            if result.returncode == 0:
-                print(f"✅ {package} - OK")
-            else:
-                print(f"⚠️  {package} - No encontrado (opcional)")
-        except FileNotFoundError:
-            print(f"⚠️  {package} - No encontrado (opcional)")
-    
     if missing:
         print(f"\n⚠️  Dependencias faltantes: {', '.join(missing)}")
         print("📋 Instrucciones de instalación:")
         
         if platform.system() == "Darwin":  # macOS
-            print("   brew install git docker")
+            print("   brew install git docker redis")
         elif platform.system() == "Linux":
-            print("   sudo apt update && sudo apt install git docker.io")
+            print("   sudo apt update && sudo apt install git docker.io redis-server")
         else:
-            print("   Instalar manualmente: git, docker")
+            print("   Instalar manualmente: git, docker, redis")
         
-        # No falla si faltan dependencias opcionales
-        if 'git' in missing:
-            print("\n❌ Git es requerido para continuar")
-            return False
-        else:
-            print("\n⚠️  Puedes continuar, pero algunas funcionalidades pueden no estar disponibles")
+        return False
     
     return True
 
@@ -112,33 +92,24 @@ def install_python_dependencies():
     # Detectar el binario de pip correcto
     if platform.system() == "Windows":
         pip_cmd = ["venv\\Scripts\\pip"]
-        python_cmd = ["venv\\Scripts\\python"]
     else:
         pip_cmd = ["venv/bin/pip"]
-        python_cmd = ["venv/bin/python"]
     
     try:
         # Actualizar pip
-        print("🔄 Actualizando pip...")
         subprocess.run(pip_cmd + ["install", "--upgrade", "pip"], check=True)
         
-        # Instalar dependencias básicas primero
-        print("📦 Instalando dependencias básicas...")
-        basic_deps = ["fastapi", "uvicorn[standard]", "pydantic"]
-        subprocess.run(pip_cmd + ["install"] + basic_deps, check=True)
+        # Instalar torch primero (es pesado)
+        print("🔥 Instalando PyTorch...")
+        subprocess.run(pip_cmd + ["install", "torch", "torchvision", "torchaudio"], check=True)
         
-        # Verificar si requirements.txt existe
-        if Path("requirements.txt").exists():
-            print("📋 Instalando desde requirements.txt...")
-            subprocess.run(pip_cmd + ["install", "-r", "requirements.txt"], check=True)
-        else:
-            print("⚠️  requirements.txt no encontrado, instalando dependencias mínimas")
+        # Instalar dependencias del requirements.txt
+        subprocess.run(pip_cmd + ["install", "-r", "requirements.txt"], check=True)
         
         print("✅ Dependencias instaladas exitosamente")
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ Error instalando dependencias: {e}")
-        print("💡 Intenta instalar manualmente: pip install fastapi uvicorn")
         return False
 
 def setup_environment_variables():
@@ -172,118 +143,78 @@ def setup_environment_variables():
             print(f"❌ Error configurando .env: {e}")
             return False
     else:
-        print("⚠️  Archivo .env.example no encontrado, creando .env básico...")
-        try:
-            with open(env_file, 'w') as f:
-                f.write("# Son1kVers3 Environment Variables\n")
-                f.write("SECRET_KEY=your-secret-key-here\n")
-                f.write("DATABASE_URL=sqlite:///./son1kvers3.db\n")
-                f.write("REDIS_URL=redis://localhost:6379/0\n")
-            print("✅ Archivo .env básico creado")
-            return True
-        except Exception as e:
-            print(f"❌ Error creando .env: {e}")
-            return False
+        print("❌ Archivo .env.example no encontrado")
+        return False
 
 def download_ai_models():
     """Descargar modelos de IA necesarios"""
     print("\n🤖 Preparando modelos de IA...")
-    print("📋 Modelos disponibles:")
+    print("📋 Modelos a descargar:")
     print("   - MusicGen (facebook/musicgen-medium) ~2GB")
     print("   - Tortoise TTS para clonación de voz ~1GB")
     
     response = input("¿Descargar modelos ahora? (y/N): ").lower()
     if response == 'y':
         try:
-            print("⚠️  Descarga de modelos requiere internet y puede tomar tiempo...")
-            print("💡 Los modelos se descargarán automáticamente en primer uso")
-            print("✅ Configuración de modelos preparada")
+            # Script para pre-descargar modelos
+            download_script = """
+import torch
+from transformers import MusicgenForConditionalGeneration, AutoProcessor
+
+print("Descargando MusicGen...")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-medium")
+processor = AutoProcessor.from_pretrained("facebook/musicgen-medium")
+print("✅ MusicGen descargado")
+            """
+            
+            # Ejecutar en el entorno virtual
+            if platform.system() == "Windows":
+                python_cmd = ["venv\\Scripts\\python", "-c", download_script]
+            else:
+                python_cmd = ["venv/bin/python", "-c", download_script]
+            
+            subprocess.run(python_cmd, check=True)
+            print("✅ Modelos descargados exitosamente")
             return True
-        except Exception as e:
-            print(f"⚠️  Error en configuración de modelos: {e}")
-            return True  # No es crítico
+        except subprocess.CalledProcessError:
+            print("⚠️  Error descargando modelos (se pueden descargar después)")
+            return True
     else:
-        print("⏭️  Modelos se descargarán automáticamente en primer uso")
+        print("⏭️  Modelos se descargarán en primer uso")
         return True
 
 def setup_docker():
     """Configurar servicios Docker"""
     print("\n🐳 Configurando servicios Docker...")
     
-    if not Path("docker-compose.yml").exists():
-        print("⚠️  docker-compose.yml no encontrado")
-        return True  # No es crítico
-    
-    try:
-        # Verificar si Docker está corriendo
-        result = subprocess.run(["docker", "info"], capture_output=True, text=True)
-        if result.returncode != 0:
-            print("⚠️  Docker no está corriendo")
-            print("💡 Inicia Docker Desktop y ejecuta: docker-compose up -d")
-            return True  # No falla el setup
-        
-        print("✅ Docker disponible")
-        
-        # Intentar iniciar servicios básicos
-        result = subprocess.run(["docker-compose", "up", "-d", "--no-deps"], 
-                               capture_output=True, text=True)
-        if result.returncode == 0:
+    if Path("docker-compose.yml").exists():
+        try:
+            subprocess.run(["docker-compose", "up", "-d", "redis", "postgres"], check=True)
             print("✅ Servicios Docker iniciados")
-        else:
-            print("⚠️  Servicios Docker no iniciados (ejecutar manualmente)")
-        
-        return True
-        
-    except FileNotFoundError:
-        print("⚠️  Docker no encontrado (opcional)")
-        return True
-    except subprocess.CalledProcessError:
-        print("⚠️  Error con Docker (ejecutar manualmente)")
-        return True
+            return True
+        except subprocess.CalledProcessError:
+            print("⚠️  Error iniciando Docker (configura manualmente)")
+            return False
+    else:
+        print("❌ docker-compose.yml no encontrado")
+        return False
 
 def run_tests():
     """Ejecutar tests para verificar instalación"""
     print("\n🧪 Ejecutando tests de verificación...")
     
-    if not Path("tests").exists():
-        print("⚠️  Directorio tests no encontrado")
-        return True  # No es crítico
-    
     try:
-        # Detectar comando python correcto
         if platform.system() == "Windows":
-            python_cmd = ["venv\\Scripts\\python"]
+            python_cmd = ["venv\\Scripts\\python", "-m", "pytest", "tests/", "-v"]
         else:
-            python_cmd = ["venv/bin/python"]
+            python_cmd = ["venv/bin/python", "-m", "pytest", "tests/", "-v"]
         
-        # Test básico de imports
-        test_code = """
-try:
-    from src.main import app
-    print("✅ FastAPI app importa correctamente")
-except Exception as e:
-    print(f"⚠️  Error importando app: {e}")
-
-try:
-    import fastapi
-    import uvicorn
-    print("✅ Dependencias básicas disponibles")
-except Exception as e:
-    print(f"⚠️  Error en dependencias: {e}")
-"""
-        
-        result = subprocess.run(python_cmd + ["-c", test_code], 
-                               capture_output=True, text=True)
-        print(result.stdout)
-        if result.stderr:
-            print("⚠️  Warnings:", result.stderr)
-        
-        print("✅ Tests básicos completados")
+        result = subprocess.run(python_cmd, check=True)
+        print("✅ Tests pasaron exitosamente")
         return True
-        
-    except Exception as e:
-        print(f"⚠️  Error en tests: {e}")
-        return True  # No es crítico
+    except subprocess.CalledProcessError:
+        print("⚠️  Algunos tests fallaron (revisar configuración)")
+        return False
 
 def print_next_steps():
     """Mostrar próximos pasos"""
@@ -297,22 +228,20 @@ def print_next_steps():
     else:
         print("   source venv/bin/activate")
     
-    print("\n2. Iniciar servicios (si tienes Docker):")
+    print("\n2. Iniciar servicios:")
     print("   docker-compose up -d")
     
     print("\n3. Iniciar el servidor:")
-    print("   uvicorn src.main:app --reload")
+    print("   python -m uvicorn src.main:app --reload")
     
-    print("\n4. Abrir aplicación:")
+    print("\n4. Iniciar Celery worker:")
+    print("   celery -A src.celery_worker worker --loglevel=info")
+    
+    print("\n5. Abrir aplicación:")
     print("   http://localhost:8000")
-    print("   http://localhost:8000/docs (API documentation)")
-    
-    print("\n5. Para desarrollo frontend:")
-    print("   cd frontend && npm install && npm run dev")
     
     print("\n🎵 ¡Son1kVers3 listo para generar música!")
     print("💡 Para ayuda: python setup.py --help")
-    print("\n🚀 ¡Resistencia Sonora activada!")
 
 def main():
     """Función principal de setup"""
@@ -343,13 +272,8 @@ def main():
         print(f"📋 {step_name}")
         print('='*50)
         
-        try:
-            if not step_function():
-                print(f"\n❌ Error en: {step_name}")
-                print("🛠️  Revisa los errores y ejecuta nuevamente")
-                sys.exit(1)
-        except Exception as e:
-            print(f"\n💥 Excepción en {step_name}: {e}")
+        if not step_function():
+            print(f"\n❌ Error en: {step_name}")
             print("🛠️  Revisa los errores y ejecuta nuevamente")
             sys.exit(1)
     
