@@ -1,0 +1,184 @@
+version: "3.9"
+
+services:
+  # Backend API
+  api:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: son1k_api
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://son1k:son1k_password@db:5432/son1k_db
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./logs:/app/logs
+    depends_on:
+      - db
+      - redis
+    networks:
+      - son1k-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: son1k_frontend
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - son1k-network
+
+  # Database
+  db:
+    image: postgres:15-alpine
+    container_name: son1k_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: son1k_db
+      POSTGRES_USER: son1k
+      POSTGRES_PASSWORD: son1k_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - son1k-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U son1k -d son1k_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and job queue
+  redis:
+    image: redis:7-alpine
+    container_name: son1k_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - son1k-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: son1k_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./storage:/var/www/storage:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - son1k-network
+
+  # File watcher for development (optional)
+  watcher:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: son1k_watcher
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app
+    volumes:
+      - ./backend:/app
+      - ./storage:/app/storage
+    depends_on:
+      - api
+    networks:
+      - son1k-network
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  son1k-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Override for development
+---
+version: "3.9"
+
+# Development override - save as docker-compose.override.yml
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    environment:
+      - ENVIRONMENT=development
+      - APP_DEBUG=true
+      - DATABASE_URL=sqlite:///./storage/son1k_dev.db
+    volumes:
+      - ./backend:/app
+      - ./storage:/app/storage
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+
+  # Remove production services in development
+  nginx:
+    profiles:
+      - production
+  
+  db:
+    profiles:
+      - production
+  
+  redis:
+    profiles:
+      - production
